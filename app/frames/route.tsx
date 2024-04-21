@@ -56,7 +56,7 @@ const handleRequest = frames(async (ctx) => {
     return {
       image: (
         <div style={div_style}>
-          Claim your coins!
+          Claim tokens!
           <span style={{ fontSize: "24px" }}>
             You have to like the cast and follow the caster first
           </span>
@@ -77,7 +77,7 @@ const handleRequest = frames(async (ctx) => {
       ),
       buttons: [
         <Button action="post" target={{ query: { state: true } }}>
-          Claim
+          🦊 Claim Fox
         </Button>,
       ],
     }
@@ -117,10 +117,10 @@ const handleRequest = frames(async (ctx) => {
 
   // Find user last claim
   const { data, error } = await supabase
-    .from("users")
-    .select("created_at", { count: "exact" })
+    .from("fox_claims")
+    .select("claimed_at", { count: "exact" })
     .eq("fid", message?.requesterFid)
-    // .order("created_at", { ascending: false })
+    .order("claimed_at", { ascending: false })
     .limit(1)
   const lastInteractionTime = checkInteractionTime(data)
 
@@ -171,11 +171,12 @@ const handleRequest = frames(async (ctx) => {
   }
 
   // Save claim history
-  await supabase.from("users").insert({
+  const save = await supabase.from("fox_claims").insert({
     fid: message?.requesterFid,
     f_address: message?.requesterCustodyAddress,
     eth_address: userAddress,
   })
+  console.log(save)
 
   return {
     image: (

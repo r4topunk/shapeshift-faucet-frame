@@ -153,9 +153,7 @@ const handleRequest = frames(async (ctx) => {
       functionName: "transfer",
       args: [userAddress, parseUnits("0.000333", 18)],
     })
-    console.log({ request })
     receipt = await walletClient.writeContract(request)
-    console.log({ receipt })
   } catch (e: any) {
     console.error(e)
     return {
@@ -176,7 +174,6 @@ const handleRequest = frames(async (ctx) => {
     f_address: message?.requesterCustodyAddress,
     eth_address: userAddress,
   })
-  console.log(save)
 
   return {
     image: (

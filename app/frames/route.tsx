@@ -1,10 +1,12 @@
+import { ABI } from "@/lib/abi"
+import { FOX_CONTRACT } from "@/lib/constants"
 import { supabase } from "@/lib/supabase"
 import { checkInteractionTime } from "@/lib/utils"
-import { chain, publicClient, walletClient } from "@/lib/web3-client"
+import { account, chain, publicClient, walletClient } from "@/lib/web3-client"
 import { farcasterHubContext } from "frames.js/middleware"
 import { Button, createFrames } from "frames.js/next"
 import { CSSProperties } from "react"
-import { formatEther, parseEther } from "viem"
+import { formatEther, formatUnits, parseUnits } from "viem"
 
 const frames = createFrames({
   basePath: "/frames",
@@ -42,6 +44,13 @@ const handleRequest = frames(async (ctx) => {
   })
   const balanceAsEther = formatEther(balance)
 
+  const foxBalance = await publicClient.readContract({
+    address: FOX_CONTRACT,
+    abi: ABI,
+    functionName: "balanceOf",
+    args: [wallet],
+  })
+
   // If no message, show home page
   if (!message)
     return {
@@ -51,9 +60,19 @@ const handleRequest = frames(async (ctx) => {
           <span style={{ fontSize: "24px" }}>
             You have to like the cast and follow the caster first
           </span>
-          <span style={{ marginTop: "32px", fontSize: "24px" }}>
-            Faucet balance: {balanceAsEther}
-          </span>
+          <div
+            style={{
+              marginTop: "32px",
+              fontSize: "24px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <span>Faucet balance:</span>
+            <span>{balanceAsEther} ETH</span>
+            <span>{formatUnits(foxBalance, 18)} FOX</span>
+          </div>
         </div>
       ),
       buttons: [
@@ -64,17 +83,12 @@ const handleRequest = frames(async (ctx) => {
     }
 
   // If user didn't complete the requirements, show to do list
-  if (
-    !message.likedCast ||
-    !message.recastedCast ||
-    !message.requesterFollowsCaster
-  ) {
+  if (!message.likedCast || !message.requesterFollowsCaster) {
     return {
       image: (
         <div style={div_style}>
           <span>@todo list</span>
           <span>[ {message.likedCast ? "x" : " "} ] Like</span>
-          <span>[ {message.recastedCast ? "x" : " "} ] Recast</span>
           <span>[ {message.requesterFollowsCaster ? "x" : " "} ] Follow</span>
         </div>
       ),
@@ -106,6 +120,7 @@ const handleRequest = frames(async (ctx) => {
     .from("users")
     .select("created_at", { count: "exact" })
     .eq("fid", message?.requesterFid)
+    // .order("created_at", { ascending: false })
     .limit(1)
   const lastInteractionTime = checkInteractionTime(data)
 
@@ -126,25 +141,56 @@ const handleRequest = frames(async (ctx) => {
     }
   }
 
+  const userAddress = message.requesterVerifiedAddresses[0] as `0x${string}`
+
   // send transaction
-  await walletClient.sendTransaction({
-    to: message.requesterVerifiedAddresses[0] as `0x${string}`,
-    value: parseEther("0.000333"),
-  })
+  let receipt = ""
+  try {
+    const { request } = await publicClient.simulateContract({
+      account,
+      address: FOX_CONTRACT,
+      abi: ABI,
+      functionName: "transfer",
+      args: [userAddress, parseUnits("0.000333", 18)],
+    })
+    console.log({ request })
+    receipt = await walletClient.writeContract(request)
+    console.log({ receipt })
+  } catch (e: any) {
+    console.error(e)
+    return {
+      image: (
+        <div
+          style={{ ...div_style, textAlign: "center", padding: "0px 120px" }}
+        >
+          <span>error:</span>
+          <span>{e.message}</span>
+        </div>
+      ),
+    }
+  }
 
   // Save claim history
   await supabase.from("users").insert({
     fid: message?.requesterFid,
     f_address: message?.requesterCustodyAddress,
-    eth_address: message?.requesterVerifiedAddresses[0],
+    eth_address: userAddress,
   })
 
   return {
     image: (
       <div style={div_style}>
-        ** you received 0.000333 eth on {chain.name} **
+        ** you received 0.000333 FOX on {chain.name} **
       </div>
     ),
+    buttons: [
+      <Button
+        action="link"
+        target={`https://optimistic.etherscan.io/tx/${receipt}`}
+      >
+        See on Optimism Scan
+      </Button>,
+    ],
   }
 })
 
